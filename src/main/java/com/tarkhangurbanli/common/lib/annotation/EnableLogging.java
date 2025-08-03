@@ -1,27 +1,23 @@
 package com.tarkhangurbanli.common.lib.annotation;
 
-import com.tarkhangurbanli.common.lib.aspect.LoggingAspect;
+import java.lang.annotation.*;
 import org.springframework.context.annotation.Import;
 
-import java.lang.annotation.*;
-
 /**
- * Enables method-level logging for services, controllers, and other components within the given base package.
- * <p>
- * This annotation imports {@link LoggingAspect} and activates AOP-based logging on method entry, exit,
- * and exception handling.
+ * Enables method-level logging for services, controllers, and components
+ * inside the specified {@code basePackage}.
  *
- * <p>If {@code basePackage} is not set, only Spring-managed beans will be logged.</p>
+ * <p>This annotation activates AOP-based method entry, exit, and exception logging.</p>
  *
  * <h2>Features:</h2>
  * <ul>
- *   <li>Logs method entry, exit, and arguments at DEBUG level.</li>
- *   <li>Logs exceptions at ERROR level with full stack trace if DEBUG is enabled.</li>
+ *   <li>Logs method entry/exit at DEBUG level with arguments and return values.</li>
+ *   <li>Logs exceptions at ERROR level with cause and optional stack trace.</li>
  * </ul>
  *
  * <h2>Usage Example:</h2>
  * <pre>{@code
- * @EnableLogging(basePackage = "com.mycompany.orderservice")
+ * @EnableLogging(basePackage = "com.myapp")
  * @Configuration
  * public class LoggingConfig {
  * }
@@ -33,13 +29,12 @@ import java.lang.annotation.*;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@Import(LoggingAspect.class)
+@Import(com.tarkhangurbanli.common.lib.configuration.LoggingRegistrar.class)
 public @interface EnableLogging {
 
     /**
-     * The root package to apply logging to.
-     * Example: "com.mycompany.orderservice"
+     * Package to be scanned and logged.
+     * Example: "com.example.service"
      */
     String basePackage() default "";
-
 }

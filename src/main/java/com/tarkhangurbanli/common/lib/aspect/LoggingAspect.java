@@ -1,23 +1,22 @@
 package com.tarkhangurbanli.common.lib.aspect;
 
-import jakarta.annotation.PostConstruct;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.aspectj.lang.JoinPoint;
-import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.*;
 import org.aspectj.lang.annotation.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
 
 /**
- * A logging aspect that provides automatic method entry, exit, and exception logging
- * for services and controllers under a configurable base package.
+ * Aspect for automatic method-level logging.
  *
- * <p>If no base package is set, logs all Spring-managed beans under the root package.</p>
- *
- * <p>This aspect logs method calls, execution time, arguments, return values and exceptions.</p>
+ * <p>Supports filtering by base package and logs:</p>
+ * <ul>
+ *   <li>Method entry and exit (with arguments and result) at DEBUG level</li>
+ *   <li>Exceptions at ERROR level</li>
+ * </ul>
  *
  * @author Tarkhan Gurbanli
  * @since 1.0.0
@@ -28,78 +27,61 @@ import java.util.Arrays;
 public class LoggingAspect {
 
     /**
-     * Configurable base package for logging.
-     * Can be overridden by @EnableLogging annotation value via Spring's property injection.
+     * Base package to restrict logging to (injected dynamically via registrar).
      */
-    @Value("${common.lib.base-package:}")
-    private String basePackage;
+    @Setter
+    private String basePackage = "";
 
-    @PostConstruct
-    public void init() {
-        if (basePackage.isBlank()) {
-            log.warn("[LOGGING] No basePackage provided in @EnableLogging. Logging all Spring-managed beans.");
-        } else {
-            log.info("[LOGGING] Method-level logging enabled for base package: '{}'", basePackage);
-        }
-    }
-
-    /**
-     * Pointcut that matches all methods within the specified base package.
-     */
     @Pointcut("execution(* *(..))")
     private void anyMethod() {}
 
     @Around("anyMethod()")
     public Object logAround(ProceedingJoinPoint joinPoint) throws Throwable {
-        String declaringClass = joinPoint.getSignature().getDeclaringTypeName();
-
-        // Filter by basePackage if specified
-        if (!basePackage.isBlank() && !declaringClass.startsWith(basePackage)) {
-            return joinPoint.proceed();
-        }
-
-        if (!log.isDebugEnabled()) {
-            return joinPoint.proceed();
-        }
+        String className = joinPoint.getSignature().getDeclaringTypeName();
+        if (!shouldLog(className)) return joinPoint.proceed();
 
         String methodName = joinPoint.getSignature().getName();
         String arguments = Arrays.toString(joinPoint.getArgs());
 
-        log.debug("Enter: {}.{}() with arguments = {}", declaringClass, methodName, arguments);
+        if (log.isDebugEnabled()) {
+            log.debug("Enter: {}.{}() with arguments = {}", className, methodName, arguments);
+        }
 
         try {
             Object result = joinPoint.proceed();
-            log.debug("Exit: {}.{}() with result = {}", declaringClass, methodName, result);
+            if (log.isDebugEnabled()) {
+                log.debug("Exit: {}.{}() with result = {}", className, methodName, result);
+            }
             return result;
         } catch (IllegalArgumentException e) {
-            log.error("Illegal argument: {} in {}.{}()", arguments, declaringClass, methodName);
+            log.error("Illegal argument: {} in {}.{}()", arguments, className, methodName);
             throw e;
         }
     }
 
     @AfterThrowing(pointcut = "anyMethod()", throwing = "e")
     public void logException(JoinPoint joinPoint, Throwable e) {
-        String declaringClass = joinPoint.getSignature().getDeclaringTypeName();
-
-        // Filter by basePackage if specified
-        if (!basePackage.isBlank() && !declaringClass.startsWith(basePackage)) {
-            return;
-        }
+        String className = joinPoint.getSignature().getDeclaringTypeName();
+        if (!shouldLog(className)) return;
 
         String methodName = joinPoint.getSignature().getName();
-        Object cause = getExceptionCause(e);
+        String cause = getRootCause(e);
 
         if (log.isDebugEnabled()) {
             log.error("Exception in {}.{}() with cause = '{}' and message = '{}'",
-                    declaringClass, methodName, cause,
+                    className, methodName, cause,
                     StringUtils.hasText(e.getMessage()) ? e.getMessage() : "No message", e);
         } else {
-            log.error("Exception in {}.{}() with cause = {}", declaringClass, methodName, cause);
+            log.error("Exception in {}.{}() with cause = {}", className, methodName, cause);
         }
     }
 
-    private Object getExceptionCause(Throwable throwable) {
-        Throwable root = throwable;
+    private boolean shouldLog(String className) {
+        return basePackage.isBlank() || className.startsWith(basePackage);
+    }
+
+    private String getRootCause(Throwable t) {
+        Throwable root = t;
         while (root.getCause() != null && root != root.getCause()) {
             root = root.getCause();
         }
